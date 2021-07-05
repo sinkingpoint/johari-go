@@ -34,6 +34,10 @@ type JohariConfig struct {
 var globalTracer trace.Tracer
 var globalConfig JohariConfig
 
+type ContextKey string
+
+const requestSpanKey = ContextKey("request_span")
+
 func init() {
 	globalTracer = trace.NewNoopTracerProvider().Tracer(INSTRUMENTATION_NAME)
 }
@@ -110,7 +114,15 @@ func isAllowedHeader(name string) bool {
 }
 
 func populateSpanFromRequest(spanName string, r *http.Request) (context.Context, trace.Span) {
-	ctx, span := globalTracer.Start(r.Context(), spanName)
+	var span trace.Span
+	var ctx context.Context
+	if r.Context().Value(requestSpanKey) != nil {
+		parentSpanCtx := r.Context().Value(requestSpanKey).(context.Context)
+		ctx, span = globalTracer.Start(parentSpanCtx, spanName)
+	} else {
+		ctx, span = globalTracer.Start(r.Context(), spanName)
+		*r = *r.WithContext(context.WithValue(r.Context(), requestSpanKey, ctx))
+	}
 
 	span.SetAttributes(attribute.String("http.method", r.Method))
 	span.SetAttributes(attribute.String("http.request_uri", r.URL.RequestURI()))
