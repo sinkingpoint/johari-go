@@ -254,5 +254,9 @@ func NewChildRequest(ctx context.Context, method, url string, body io.ReadCloser
 }
 
 func NewChildSpan(ctx context.Context, spanName string) (context.Context, trace.Span) {
-	return globalTracer.Start(ctx, spanName)
+	if pctx := extractParentContext(ctx); pctx != nil {
+		return globalTracer.Start(pctx, spanName)
+	} else {
+		return globalTracer.Start(ctx, spanName)
+	}
 }
