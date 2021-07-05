@@ -111,7 +111,6 @@ func isAllowedHeader(name string) bool {
 
 func populateSpanFromRequest(spanName string, r *http.Request) (context.Context, trace.Span) {
 	ctx, span := globalTracer.Start(r.Context(), spanName)
-	*r = *r.WithContext(ctx)
 
 	span.SetAttributes(attribute.String("http.method", r.Method))
 	span.SetAttributes(attribute.String("http.request_uri", r.URL.RequestURI()))
