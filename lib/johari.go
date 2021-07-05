@@ -128,7 +128,7 @@ func populateSpanFromRequest(spanName string, r *http.Request) (context.Context,
 	return ctx, span
 }
 
-func (j *johariMuxWrapper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (j johariMuxWrapper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, span := populateSpanFromRequest(fmt.Sprintf("%s %s", r.Method, r.RequestURI), r)
 	defer span.End()
 
