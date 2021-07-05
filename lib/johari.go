@@ -203,6 +203,14 @@ func (j johariHTTPTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 	return resp, err
 }
 
+func extractParentContext(ctx context.Context) context.Context {
+	if ctx.Value(requestSpanKey) != nil {
+		return ctx.Value(requestSpanKey).(context.Context)
+	} else {
+		return nil
+	}
+}
+
 func NewHTTPServerWrapper(muxer http.Handler) johariMuxWrapper {
 	return johariMuxWrapper{
 		backend: muxer,
@@ -236,7 +244,11 @@ func NewChildRequest(ctx context.Context, method, url string, body io.ReadCloser
 		body,
 	)
 
-	req = req.WithContext(ctx)
+	if pctx := extractParentContext(ctx); pctx != nil {
+		req = req.WithContext(pctx)
+	} else {
+		req = req.WithContext(ctx)
+	}
 
 	return req, err
 }
