@@ -183,8 +183,16 @@ func NewHTTPServerWrapper(muxer http.Handler) johariMuxWrapper {
 }
 
 func NewHTTPClientWrapper(client *http.Client) *http.Client {
+	var transport http.RoundTripper
+
+	if client.Transport != nil {
+		transport = client.Transport
+	} else {
+		transport = http.DefaultTransport
+	}
+
 	client.Transport = johariHTTPTransport{
-		backingTransport: client.Transport,
+		backingTransport: transport,
 	}
 
 	return client
