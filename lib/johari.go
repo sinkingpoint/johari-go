@@ -3,6 +3,7 @@ package johari
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -207,4 +208,16 @@ func NewHTTPClientWrapper(client *http.Client) *http.Client {
 	}
 
 	return client
+}
+
+func NewChildRequest(parent *http.Request, method, url string, body io.ReadCloser) (*http.Request, error) {
+	req, err := http.NewRequest(
+		method,
+		url,
+		body,
+	)
+
+	req = req.WithContext(parent.Context())
+
+	return req, err
 }
