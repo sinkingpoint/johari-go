@@ -23,12 +23,26 @@ import (
 
 const INSTRUMENTATION_NAME = "github.com/johari/sinkingpoint"
 
+// JohariConfig is the config used by Johari
+// Everything is Optional except ServiceName
 type JohariConfig struct {
-	ServiceName         string
-	CollectorURL        string
-	Debug               bool
-	SamplingRate        float64
-	Propagator          propagation.TextMapPropagator
+	// The name of the service that is doing tracing
+	ServiceName string
+
+	// The URL to send Jaeger thrift spans to
+	CollectorURL string
+
+	// If true, only log spans, don't send them off (Default: false)
+	Debug bool
+
+	// The rate at which to sample (0 - 1), where 0 (default) is no sampling (send no spans)
+	// and 1 is send all the spans
+	SamplingRate float64
+
+	// The span propagation format (Defaults to B2)
+	Propagator propagation.TextMapPropagator
+
+	// Any extra headers that we should log
 	ExtraAllowedHeaders []string
 }
 
@@ -43,8 +57,12 @@ func init() {
 	globalTracer = trace.NewNoopTracerProvider().Tracer(INSTRUMENTATION_NAME)
 }
 
+// InitTracing initialises the global tracer that Johari uses to create
+// spans for incoming and outgoing requests
 func InitTracing(config JohariConfig) {
 	var sampler tracesdk.Sampler
+
+	// Treat > 1 as 1 and < 0 as 0
 	if config.SamplingRate >= 1 {
 		sampler = tracesdk.AlwaysSample()
 	} else if config.SamplingRate <= 0 {
@@ -53,6 +71,7 @@ func InitTracing(config JohariConfig) {
 		sampler = tracesdk.TraceIDRatioBased(config.SamplingRate)
 	}
 
+	// Default the propagator to B3
 	if config.Propagator == nil {
 		config.Propagator = b3.B3{}
 	}
@@ -90,6 +109,8 @@ type johariMuxWrapper struct {
 	backend http.Handler
 }
 
+// Checks the list of allowed headers to see whether the
+// given one is allowed to be logged. TODO: Make this a hashset
 func isAllowedHeader(name string) bool {
 	normalisedName := strings.ToLower(name)
 	for _, allowed := range []string{
@@ -114,6 +135,8 @@ func isAllowedHeader(name string) bool {
 	return false
 }
 
+// Creates a new span and populates it with all the allowed values from the request
+// and its headers. Also stores the span inside the request so that we can make child spans of it later
 func populateSpanFromRequest(spanName string, r *http.Request) (context.Context, trace.Span) {
 	var span trace.Span
 	var ctx context.Context
@@ -142,6 +165,8 @@ func populateSpanFromRequest(spanName string, r *http.Request) (context.Context,
 	return ctx, span
 }
 
+// Populates the given span with data from the response, including the response code
+// and the allowed headers
 func populateSpanFromResponse(span trace.Span, r *http.Response) {
 	span.SetAttributes(attribute.Int("http.response.status_code", r.StatusCode))
 	for k, v := range r.Header {
@@ -166,6 +191,8 @@ func (j johariMuxWrapper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.Int("http.response_size", responseWriter.length))
 }
 
+// A Wrapper around a response writer that stores information
+// about the response we are writing
 type johariResponseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -211,12 +238,16 @@ func extractParentContext(ctx context.Context) context.Context {
 	}
 }
 
+// Wraps a given http.Handler in a middleware that creates spans for every request
+// and automatically gives you a bunch of information about the request and response
 func NewHTTPServerWrapper(muxer http.Handler) johariMuxWrapper {
 	return johariMuxWrapper{
 		backend: muxer,
 	}
 }
 
+// Wraps a given http.Client (iff it's not already wrapped), that generates spans
+// for each request that is sent through it
 func NewHTTPClientWrapper(client *http.Client) *http.Client {
 	var transport http.RoundTripper
 
@@ -226,8 +257,8 @@ func NewHTTPClientWrapper(client *http.Client) *http.Client {
 		transport = http.DefaultTransport
 	}
 
+	// Check whether the transport is already wrapped
 	_, ok := client.Transport.(johariHTTPTransport)
-
 	if !ok {
 		client.Transport = johariHTTPTransport{
 			backingTransport: transport,
@@ -237,6 +268,8 @@ func NewHTTPClientWrapper(client *http.Client) *http.Client {
 	return client
 }
 
+// Generates a request that will generate a span under the span in the context
+// Useful for subrequests spawned by an incoming request
 func NewChildRequest(ctx context.Context, method, url string, body io.ReadCloser) (*http.Request, error) {
 	req, err := http.NewRequest(
 		method,
@@ -253,6 +286,7 @@ func NewChildRequest(ctx context.Context, method, url string, body io.ReadCloser
 	return req, err
 }
 
+// Generates a new span under the span in the given context
 func NewChildSpan(ctx context.Context, spanName string) (context.Context, trace.Span) {
 	if pctx := extractParentContext(ctx); pctx != nil {
 		return globalTracer.Start(pctx, spanName)
