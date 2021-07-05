@@ -125,19 +125,34 @@ func populateSpanFromRequest(spanName string, r *http.Request) (context.Context,
 		*r = *r.WithContext(context.WithValue(r.Context(), requestSpanKey, ctx))
 	}
 
-	span.SetAttributes(attribute.String("http.method", r.Method))
-	span.SetAttributes(attribute.String("http.request_uri", r.URL.RequestURI()))
-	span.SetAttributes(attribute.String("http.host", r.URL.Host))
+	span.SetAttributes(attribute.String("http.request.method", r.Method))
+	span.SetAttributes(attribute.String("http.request.request_uri", r.URL.RequestURI()))
+	span.SetAttributes(attribute.String("http.request.host", r.URL.Host))
 
 	for k, v := range r.Header {
 		if !isAllowedHeader(k) {
 			continue
 		}
 
-		span.SetAttributes(attribute.String(k, strings.Join(v, ", ")))
+		name := "http.request." + k
+
+		span.SetAttributes(attribute.String(name, strings.Join(v, ", ")))
 	}
 
 	return ctx, span
+}
+
+func populateSpanFromResponse(span trace.Span, r *http.Response) {
+	span.SetAttributes(attribute.Int("http.response.status_code", r.StatusCode))
+	for k, v := range r.Header {
+		if !isAllowedHeader(k) {
+			continue
+		}
+
+		name := "http.response." + k
+
+		span.SetAttributes(attribute.String(name, strings.Join(v, ", ")))
+	}
 }
 
 func (j johariMuxWrapper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -181,9 +196,9 @@ func (j johariHTTPTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 
 	if err != nil {
 		span.RecordError(err)
+	} else {
+		populateSpanFromResponse(span, resp)
 	}
-
-	span.SetAttributes(attribute.Int("http.response_code", resp.StatusCode))
 
 	return resp, err
 }
