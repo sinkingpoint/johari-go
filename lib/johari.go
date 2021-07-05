@@ -203,8 +203,12 @@ func NewHTTPClientWrapper(client *http.Client) *http.Client {
 		transport = http.DefaultTransport
 	}
 
-	client.Transport = johariHTTPTransport{
-		backingTransport: transport,
+	_, ok := client.Transport.(johariHTTPTransport)
+
+	if !ok {
+		client.Transport = johariHTTPTransport{
+			backingTransport: transport,
+		}
 	}
 
 	return client
