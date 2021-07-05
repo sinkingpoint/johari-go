@@ -214,14 +214,18 @@ func NewHTTPClientWrapper(client *http.Client) *http.Client {
 	return client
 }
 
-func NewChildRequest(parent *http.Request, method, url string, body io.ReadCloser) (*http.Request, error) {
+func NewChildRequest(ctx context.Context, method, url string, body io.ReadCloser) (*http.Request, error) {
 	req, err := http.NewRequest(
 		method,
 		url,
 		body,
 	)
 
-	req = req.WithContext(parent.Context())
+	req = req.WithContext(ctx)
 
 	return req, err
+}
+
+func NewChildSpan(ctx context.Context, spanName string) (context.Context, trace.Span) {
+	return globalTracer.Start(ctx, spanName)
 }
